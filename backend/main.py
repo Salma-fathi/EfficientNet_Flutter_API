@@ -6,10 +6,8 @@ import os
 from model_inference import initialize_predictor, ImagePredictor
 
 # --- Configuration ---
-MODEL_PATH = "effv2s_fold5.pt"
-# Check if the model file exists
-if not os.path.exists(MODEL_PATH):
-    raise FileNotFoundError(f"Model file not found at {MODEL_PATH}. Please ensure it is in the same directory.")
+# Allow overriding the model path via environment variable
+MODEL_PATH = os.getenv("MODEL_PATH", "effv2s_fold5.pt")
 
 # --- Application Lifespan (Startup/Shutdown) ---
 @asynccontextmanager
@@ -20,9 +18,14 @@ async def lifespan(app: FastAPI):
     """
     print("Application startup: Initializing model predictor...")
     try:
-        # Initialize the global predictor instance
-        app.state.predictor = initialize_predictor(MODEL_PATH)
-        print("Model predictor initialized successfully.")
+        # Initialize the global predictor instance only if the model file exists
+        if os.path.exists(MODEL_PATH):
+            app.state.predictor = initialize_predictor(MODEL_PATH)
+            print("Model predictor initialized successfully.")
+        else:
+            app.state.predictor = None
+            print(f"WARNING: Model file not found at {MODEL_PATH}. Starting API without the model.\n"
+                  "Predict endpoint will return 503 until a valid model is provided.")
     except Exception as e:
         print(f"FATAL ERROR during model initialization: {e}")
         # In a real application, you might want to gracefully handle this
@@ -48,7 +51,8 @@ app = FastAPI(
 @app.get("/")
 async def root():
     """Health check endpoint."""
-    return {"message": "EfficientNetV2-S Inference API is running!", "status": "ok"}
+    status = "ok" if getattr(app.state, "predictor", None) is not None else "degraded"
+    return {"message": "EfficientNetV2-S Inference API is running!", "status": status, "model_path": MODEL_PATH}
 
 @app.post("/predict")
 async def predict_image(file: UploadFile = File(...)):
