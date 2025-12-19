@@ -96,14 +96,46 @@ class ImagePredictor:
 
     def _load_model(self, ckpt_path: str) -> nn.Module:
         """Private helper to load the model from its checkpoint."""
+        import os
+        from pathlib import Path
+        
         num_classes = len(CLASS2IDX)
         
-        model = create_model(num_classes)
         try:
-            # Load state dict from the checkpoint file
-            # Assumes checkpoint is saved as {"model": state_dict, ...}
-            sd = torch.load(ckpt_path, map_location=self.device)["model"]
-            model.load_state_dict(sd)
+            # Check if ckpt_path is a directory (TorchScript SavedModule format)
+            if os.path.isdir(ckpt_path):
+                print(f"Loading from SavedModule format: {ckpt_path}")
+                # Try loading as TorchScript SavedModule first
+                try:
+                    model = torch.jit.load(ckpt_path, map_location=self.device)
+                    print(f"Loaded as TorchScript SavedModule")
+                except Exception as e:
+                    print(f"Could not load as SavedModule: {e}")
+                    # Fallback: try loading data.pkl as state dict
+                    data_pkl_path = os.path.join(ckpt_path, "data.pkl")
+                    if os.path.exists(data_pkl_path):
+                        print(f"Fallback: Loading from data.pkl")
+                        # Use pickle directly to handle persistent IDs
+                        import pickle
+                        with open(data_pkl_path, 'rb') as f:
+                            sd = pickle.load(f)
+                        # Check if it's wrapped in a dict with "model" key
+                        if isinstance(sd, dict) and "model" in sd:
+                            sd = sd["model"]
+                        model = create_model(num_classes)
+                        model.load_state_dict(sd)
+                    else:
+                        raise FileNotFoundError(f"data.pkl not found in {ckpt_path}")
+            else:
+                # Load from single .pt/.pth file
+                print(f"Loading from file format: {ckpt_path}")
+                sd = torch.load(ckpt_path, map_location=self.device, weights_only=False)
+                # Check if it's wrapped in a dict with "model" key
+                if isinstance(sd, dict) and "model" in sd:
+                    sd = sd["model"]
+                model = create_model(num_classes)
+                model.load_state_dict(sd)
+            
             model.to(self.device)
             model.eval()  # Set model to evaluation mode
             return model
