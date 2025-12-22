@@ -1,0 +1,42 @@
+# --- Flutter / Dart ---
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+build/
+pubspec.lock
+
+# iOS/Android (if added later)
+ios/Pods/
+ios/.symlinks/
+ios/Flutter/Flutter.framework/
+ios/Flutter/Generated.xcconfig
+android/.gradle/
+android/app/build/
+
+# --- VS Code / IDE ---
+.vscode/
+.idea/
+*.iml
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# --- Large artifacts / data ---
+backend/effv2s_fold5.pt
+backend/effv2s_fold5/
+backend/*.onnx
+backend/*.pth
+backend/*.pt
+backend/*.tflite
+
+# --- OS files ---
+.DS_Store
+Thumbs.db
