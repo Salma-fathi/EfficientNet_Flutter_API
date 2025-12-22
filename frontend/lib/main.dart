@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:google_fonts/google_fonts.dart';
 
 // -----------------------------------------------------------------------------
 // Configuration
@@ -35,7 +36,9 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'AI Inference App',
       theme: ThemeData(
-        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1565C0)),
+        textTheme: GoogleFonts.interTextTheme(),
         visualDensity: VisualDensity.adaptivePlatformDensity,
       ),
       home: const InferenceScreen(),
@@ -164,118 +167,171 @@ class _InferenceScreenState extends State<InferenceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Image Classifier'),
-        backgroundColor: Colors.blueAccent,
+        title: Text(
+          'AI Image Classifier',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
+        elevation: 2,
       ),
+      backgroundColor: Colors.grey[50],
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              // Display the selected image
-              Container(
-                margin: const EdgeInsets.only(bottom: 20),
-                height: 300,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.blueAccent, width: 2),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                // Top info / instruction
+                Text(
+                  'Select an image to classify whether it is Real or Fake.',
+                  style:
+                      GoogleFonts.inter(fontSize: 16, color: Colors.grey[700]),
+                  textAlign: TextAlign.center,
                 ),
-                child: _imageBytes == null
-                    ? Center(
-                        child: Text(
-                          'Your image will appear here',
-                          style:
-                              TextStyle(color: Colors.grey[600], fontSize: 16),
-                        ),
-                      )
-                    : ClipRRect(
-                        borderRadius: BorderRadius.circular(10),
-                        child: kIsWeb
-                            ? Image.memory(
-                                _imageBytes!,
-                                fit: BoxFit.contain,
-                              )
-                            : Image.file(
-                                _image!,
-                                fit: BoxFit.contain,
-                              ),
-                      ),
-              ),
 
-              // Pick Image Button
-              ElevatedButton.icon(
-                onPressed: _pickImage,
-                icon: const Icon(Icons.photo_library),
-                label: const Text('Select Image from Gallery'),
-                style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
+                const SizedBox(height: 16),
 
-              const SizedBox(height: 20),
-
-              // Predict Button
-              _isLoading
-                  ? const CircularProgressIndicator()
-                  : ElevatedButton.icon(
-                      onPressed: _uploadImageAndPredict,
-                      icon: const Icon(Icons.send),
-                      label: const Text('Run Prediction'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 30, vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
-                    ),
-
-              const SizedBox(height: 30),
-
-              // Result Display Card
-              Card(
-                elevation: 5,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                child: Container(
+                // Display the selected image
+                Container(
+                  margin: const EdgeInsets.only(bottom: 18),
+                  height: 340,
                   width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Prediction Result:',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.blueAccent,
-                        ),
-                      ),
-                      const Divider(),
-                      Text(
-                        _predictionResult,
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: _predictionResult.startsWith('Error')
-                              ? Colors.red
-                              : Colors.black87,
-                          height: 1.5,
-                        ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.grey.shade200, width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.03),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
+                  child: _imageBytes == null
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.image,
+                                  size: 56, color: Colors.grey[300]),
+                              const SizedBox(height: 8),
+                              Text(
+                                'No image selected',
+                                style: GoogleFonts.inter(
+                                    color: Colors.grey[600], fontSize: 16),
+                              ),
+                            ],
+                          ),
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: kIsWeb
+                              ? Image.memory(
+                                  _imageBytes!,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                )
+                              : Image.file(
+                                  _image!,
+                                  fit: BoxFit.contain,
+                                  width: double.infinity,
+                                ),
+                        ),
                 ),
-              ),
-            ],
+
+                // Action row: pick + predict
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.photo_library),
+                        label: Text('Choose Image',
+                            style:
+                                GoogleFonts.inter(fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _isLoading
+                          ? SizedBox(
+                              height: 48,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation(
+                                      Theme.of(context).colorScheme.primary),
+                                ),
+                              ),
+                            )
+                          : ElevatedButton.icon(
+                              onPressed: _uploadImageAndPredict,
+                              icon: const Icon(Icons.send),
+                              label: Text('Run Prediction',
+                                  style: GoogleFonts.inter(
+                                      fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.secondary,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 22),
+
+                // Result Display Card
+                Card(
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Prediction Result',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                        const Divider(),
+                        Text(
+                          _predictionResult,
+                          style: GoogleFonts.inter(
+                            fontSize: 15,
+                            color: _predictionResult.startsWith('Error')
+                                ? Colors.red
+                                : Colors.black87,
+                            height: 1.45,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
