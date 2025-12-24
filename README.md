@@ -46,28 +46,11 @@ pip install -r requirements.txt
 # Ensure effv2s_fold5.pt is in this folder
 uvicorn main:app --host 0.0.0.0 --port 8000
 #### 2.Frontend Setup
-Bash
 
 cd frontend
 flutter pub get
-# Update baseUrl in your API service to your local machine IP
 flutter run
-🎯 API Endpoints
-POST /predict
-Submit an image file via multipart form-data. Sample JSON Response:
 
-JSON
-
-{
-  "success": true,
-  "predicted_label": "Fraudulent",
-  "probabilities": {
-    "Authentic": 0.005,
-    "Fraudulent": 0.995
-  }
-}
-🛠️ Project Structure
-Plaintext
 
 .
 ├── backend/                # FastAPI Application & ML Model
