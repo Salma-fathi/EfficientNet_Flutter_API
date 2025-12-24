@@ -5,6 +5,9 @@ from torchvision import transforms
 from PIL import Image, ImageOps
 from typing import Dict, Union
 from io import BytesIO
+import logging
+
+logger = logging.getLogger(__name__)
 
 # --------------------------
 # Configuration
@@ -13,7 +16,7 @@ from io import BytesIO
 CLASS2IDX = {"Fake": 0, "Real": 1}
 # Map the model's output index back to a class name
 IDX2CLASS = {v: k for k, v in CLASS2IDX.items()}
-IMG_SIZE = 384 # Based on the notebook's default setting
+IMG_SIZE = 384  # Based on the notebook's default setting
 
 # --------------------------
 # Model Definition
@@ -80,7 +83,7 @@ class ImagePredictor:
     """
     def __init__(self, 
                  ckpt_path: str, 
-                 device: str = "cpu", # Force CPU for sandbox environment
+                 device: str = "cpu",  # Force CPU for sandbox environment
                  img_size: int = IMG_SIZE):
         """
         Initializes the predictor.
@@ -90,9 +93,9 @@ class ImagePredictor:
         self.transform = get_inference_transform(self.img_size)
         
         # Load the single model
-        print(f"Loading model from {ckpt_path} onto {self.device}...")
+        logger.info(f"Loading model from {ckpt_path} onto {self.device}...")
         self.model = self._load_model(ckpt_path)
-        print("Model loaded successfully.")
+        logger.info("Model loaded successfully.")
 
     def _load_model(self, ckpt_path: str) -> nn.Module:
         """Private helper to load the model from its checkpoint."""
@@ -104,17 +107,17 @@ class ImagePredictor:
         try:
             # Check if ckpt_path is a directory (TorchScript SavedModule format)
             if os.path.isdir(ckpt_path):
-                print(f"Loading from SavedModule format: {ckpt_path}")
+                logger.info(f"Loading from SavedModule format: {ckpt_path}")
                 # Try loading as TorchScript SavedModule first
                 try:
                     model = torch.jit.load(ckpt_path, map_location=self.device)
-                    print(f"Loaded as TorchScript SavedModule")
+                    logger.info(f"Loaded as TorchScript SavedModule")
                 except Exception as e:
-                    print(f"Could not load as SavedModule: {e}")
+                    logger.warning(f"Could not load as SavedModule: {e}")
                     # Fallback: try loading data.pkl as state dict
                     data_pkl_path = os.path.join(ckpt_path, "data.pkl")
                     if os.path.exists(data_pkl_path):
-                        print(f"Fallback: Loading from data.pkl")
+                        logger.info(f"Fallback: Loading from data.pkl")
                         # Use pickle directly to handle persistent IDs
                         import pickle
                         with open(data_pkl_path, 'rb') as f:
@@ -128,7 +131,7 @@ class ImagePredictor:
                         raise FileNotFoundError(f"data.pkl not found in {ckpt_path}")
             else:
                 # Load from single .pt/.pth file
-                print(f"Loading from file format: {ckpt_path}")
+                logger.info(f"Loading from file format: {ckpt_path}")
                 sd = torch.load(ckpt_path, map_location=self.device, weights_only=False)
                 # Check if it's wrapped in a dict with "model" key
                 if isinstance(sd, dict) and "model" in sd:
@@ -140,46 +143,98 @@ class ImagePredictor:
             model.eval()  # Set model to evaluation mode
             return model
         except Exception as e:
-            print(f"Error loading checkpoint {ckpt_path}: {e}")
+            logger.error(f"Error loading checkpoint {ckpt_path}: {e}")
             raise
 
     @torch.no_grad()
     def predict(self, image_bytes: bytes) -> Dict[str, Union[str, int, float]]:
         """
         Runs inference on a single image from image bytes (received from FastAPI).
+        Returns a dictionary with predicted_label, predicted_index, and probabilities.
         """
         try:
             # 1. Open image from bytes
-            img = Image.open(BytesIO(image_bytes)).convert("RGB")
-        except Exception as e:
-            return {"error": f"Error opening image from bytes: {e}"}
+            try:
+                img = Image.open(BytesIO(image_bytes)).convert("RGB")
+                logger.debug(f"Image opened successfully. Size: {img.size}")
+            except Exception as e:
+                logger.error(f"Error opening image from bytes: {e}")
+                return {
+                    "error": f"Invalid image file: {str(e)}",
+                    "error_code": "INVALID_IMAGE"
+                }
 
-        # 2. Preprocess the image
-        tensor = self.transform(img).unsqueeze(0).to(self.device)
-        
-        # 3. Run inference
-        # Note: torch.cuda.amp.autocast is removed as we are forcing CPU
-        logits = self.model(tensor)
-        # Calculate probabilities
-        probs = torch.softmax(logits, dim=1)
-        
-        # 4. Get probabilities for each class
-        prob_fake = probs[0, CLASS2IDX["Fake"]].item()
-        prob_real = probs[0, CLASS2IDX["Real"]].item()
-        
-        # 5. Determine final prediction
-        pred_idx = torch.argmax(probs, dim=1).item()
-        pred_label = IDX2CLASS[pred_idx]
-        
-        # 6. Format the output
-        return {
-            "predicted_label": pred_label,
-            "predicted_index": pred_idx,
-            "probabilities": {
-                "Fake": prob_fake,
-                "Real": prob_real
+            # 2. Preprocess the image
+            try:
+                tensor = self.transform(img).unsqueeze(0).to(self.device)
+                logger.debug(f"Image preprocessed. Tensor shape: {tensor.shape}")
+            except Exception as e:
+                logger.error(f"Error preprocessing image: {e}")
+                return {
+                    "error": f"Image preprocessing failed: {str(e)}",
+                    "error_code": "PREPROCESSING_ERROR"
+                }
+            
+            # 3. Run inference
+            try:
+                logits = self.model(tensor)
+                logger.debug(f"Inference completed. Logits shape: {logits.shape}")
+            except Exception as e:
+                logger.error(f"Error during model inference: {e}")
+                return {
+                    "error": f"Model inference failed: {str(e)}",
+                    "error_code": "INFERENCE_ERROR"
+                }
+
+            # 4. Calculate probabilities
+            try:
+                probs = torch.softmax(logits, dim=1)
+                prob_fake = probs[0, CLASS2IDX["Fake"]].item()
+                prob_real = probs[0, CLASS2IDX["Real"]].item()
+                
+                # Validate probabilities
+                if not (0 <= prob_fake <= 1 and 0 <= prob_real <= 1):
+                    logger.error(f"Invalid probabilities: Fake={prob_fake}, Real={prob_real}")
+                    return {
+                        "error": "Invalid probability values detected",
+                        "error_code": "INVALID_PROBABILITY"
+                    }
+                logger.debug(f"Probabilities calculated - Fake: {prob_fake:.4f}, Real: {prob_real:.4f}")
+            except Exception as e:
+                logger.error(f"Error calculating probabilities: {e}")
+                return {
+                    "error": f"Probability calculation failed: {str(e)}",
+                    "error_code": "PROBABILITY_ERROR"
+                }
+            
+            # 5. Determine final prediction
+            try:
+                pred_idx = torch.argmax(probs, dim=1).item()
+                pred_label = IDX2CLASS[pred_idx]
+                logger.info(f"Prediction made: {pred_label} (index: {pred_idx})")
+            except Exception as e:
+                logger.error(f"Error determining prediction: {e}")
+                return {
+                    "error": f"Prediction determination failed: {str(e)}",
+                    "error_code": "PREDICTION_ERROR"
+                }
+            
+            # 6. Format the output
+            return {
+                "predicted_label": pred_label,
+                "predicted_index": pred_idx,
+                "probabilities": {
+                    "Fake": round(prob_fake, 4),
+                    "Real": round(prob_real, 4)
+                },
+                "success": True
             }
-        }
+        except Exception as e:
+            logger.error(f"Unexpected error in predict method: {e}", exc_info=True)
+            return {
+                "error": f"Unexpected error: {str(e)}",
+                "error_code": "UNEXPECTED_ERROR"
+            }
 
 # Global variable to hold the initialized predictor
 predictor = None
@@ -189,9 +244,11 @@ def initialize_predictor(ckpt_path: str):
     if predictor is None:
         try:
             # Note: We are forcing device="cpu" as the sandbox may not have a GPU
+            logger.info("Initializing predictor...")
             predictor = ImagePredictor(ckpt_path=ckpt_path, device="cpu", img_size=IMG_SIZE)
+            logger.info("Predictor initialized successfully")
         except Exception as e:
-            print(f"Failed to initialize predictor: {e}")
+            logger.error(f"Failed to initialize predictor: {e}")
             # Re-raise the exception to stop the application startup
             raise
     return predictor
